@@ -3,6 +3,7 @@ import pandas as pd
 import joblib
 import os
 import gdown
+import traceback
 from sklearn.preprocessing import LabelEncoder
 
 # -----------------------------------------------------------
@@ -29,7 +30,7 @@ if not os.path.exists(CSV_PATH):
     gdown.download(f"https://drive.google.com/uc?id={CSV_ID}", CSV_PATH, quiet=False)
 
 # -----------------------------------------------------------
-# 🎨 STYLES (Clean White Theme)
+# 🎨 STYLES
 # -----------------------------------------------------------
 st.markdown("""
     <style>
@@ -148,45 +149,53 @@ elif st.session_state.page == "result":
         cat_cols = ['gender', 'marital_status', 'education', 'employment_type',
                     'company_type', 'house_type', 'existing_loans', 'emi_scenario']
 
-        for col in cat_cols:
-            le = LabelEncoder()
-            le.fit(df[col].astype(str))
-            input_data[col] = le.transform(input_data[col].astype(str))
+        try:
+            for col in cat_cols:
+                if col in df.columns:
+                    le = LabelEncoder()
+                    le.fit(df[col].astype(str))
+                    input_data[col] = le.transform(input_data[col].astype(str))
 
-        reg = joblib.load(REG_MODEL_PATH)
-        cls = joblib.load(CLS_MODEL_PATH)
+            reg = joblib.load(REG_MODEL_PATH)
+            cls = joblib.load(CLS_MODEL_PATH)
 
-        with st.spinner("Processing your prediction... ⏳"):
-            eligibility_pred = cls.predict(input_data)[0]
-            emi_pred = reg.predict(input_data)[0]
+            with st.spinner("Processing your prediction... ⏳"):
+                eligibility_pred = cls.predict(input_data)[0]
+                emi_pred = reg.predict(input_data)[0]
 
-        eligibility_map = {0: ("✅ Eligible", "#00bfa5"), 1: ("⚠️ High Risk", "#ffb300"), 2: ("❌ Not Eligible", "#e53935")}
-        status, color = eligibility_map.get(eligibility_pred, ("❓ Unknown", "#757575"))
+            eligibility_map = {0: ("✅ Eligible", "#00bfa5"), 1: ("⚠️ High Risk", "#ffb300"), 2: ("❌ Not Eligible", "#e53935")}
+            status, color = eligibility_map.get(eligibility_pred, ("❓ Unknown", "#757575"))
 
-        st.markdown(
-            f"""
-            <div style='background-color:#f3e5f5; padding:25px; border-radius:15px; text-align:center; box-shadow:0 0 10px rgba(74, 20, 140, 0.2);'>
-                <h3 style='color:{color}; font-weight:700;'>🏁 EMI Eligibility Result</h3>
-                <p style='font-size:1.3rem; font-weight:600; color:{color};'>
-                    {status}
-                </p>
-                <hr style='border:1px solid #4a148c; margin:15px 0;'>
-                <h4 style='color:#4a148c;'>💰 Predicted EMI Amount</h4>
-                <p style='font-size:2rem; color:#00bfa5; font-weight:700;'>₹{emi_pred:,.2f}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            st.markdown(
+                f"""
+                <div style='background-color:#f3e5f5; padding:25px; border-radius:15px; text-align:center; box-shadow:0 0 10px rgba(74, 20, 140, 0.2);'>
+                    <h3 style='color:{color}; font-weight:700;'>🏁 EMI Eligibility Result</h3>
+                    <p style='font-size:1.3rem; font-weight:600; color:{color};'>
+                        {status}
+                    </p>
+                    <hr style='border:1px solid #4a148c; margin:15px 0;'>
+                    <h4 style='color:#4a148c;'>💰 Predicted EMI Amount</h4>
+                    <p style='font-size:2rem; color:#00bfa5; font-weight:700;'>₹{emi_pred:,.2f}</p>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-        st.balloons()
+            st.balloons()
 
-        if eligibility_pred == 0:
-            st.success("🎉 Congratulations! You're eligible for the EMI. Manage your finances wisely!")
-        elif eligibility_pred == 1:
-            st.warning("⚠️ You're at moderate risk. Review your financial details carefully.")
-        else:
-            st.error("❌ Unfortunately, you're not eligible now. Try adjusting your requested amount or tenure.")
+            if eligibility_pred == 0:
+                st.success("🎉 Congratulations! You're eligible for the EMI. Manage your finances wisely!")
+            elif eligibility_pred == 1:
+                st.warning("⚠️ You're at moderate risk. Review your financial details carefully.")
+            else:
+                st.error("❌ Unfortunately, you're not eligible now. Try adjusting your requested amount or tenure.")
+
+        except Exception as e:
+            st.error("🚨 Error occurred while predicting. Please check details below.")
+            st.code(traceback.format_exc())
 
         if st.button("⬅️ Back to Input Page"):
             st.session_state.page = "input"
             st.rerun()
+
+
