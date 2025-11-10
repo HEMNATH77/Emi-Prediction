@@ -3,7 +3,6 @@ import pandas as pd
 import joblib
 import os
 import gdown
-import traceback
 from sklearn.preprocessing import LabelEncoder
 
 # -----------------------------------------------------------
@@ -21,7 +20,7 @@ REG_MODEL_PATH = "Final_Regression_Cp.pkl"
 CLS_MODEL_PATH = "Final_Classification_Cp.pkl"
 CSV_PATH = "cleaned_EMI.csv"
 
-# ✅ Download Files from Google Drive if not present
+# ✅ Download Files if Not Present
 if not os.path.exists(REG_MODEL_PATH):
     gdown.download(f"https://drive.google.com/uc?id={REG_MODEL_ID}", REG_MODEL_PATH, quiet=False)
 if not os.path.exists(CLS_MODEL_PATH):
@@ -71,7 +70,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------
-# 🧭 PAGE NAVIGATION CONTROL
+# 🧭 PAGE CONTROL
 # -----------------------------------------------------------
 if "page" not in st.session_state:
     st.session_state.page = "input"
@@ -138,6 +137,7 @@ elif st.session_state.page == "result":
     else:
         user_input = st.session_state.user_input
 
+        # 🧩 Base template
         input_data = pd.DataFrame([{
             col: (median_values[col] if col in median_values else mode_values[col])
             for col in df.columns if col not in ['emi_eligibility', 'max_monthly_emi']
@@ -146,23 +146,33 @@ elif st.session_state.page == "result":
         for key, val in user_input.items():
             input_data[key] = val
 
+        # 🧠 Encode & Clean
         cat_cols = ['gender', 'marital_status', 'education', 'employment_type',
                     'company_type', 'house_type', 'existing_loans', 'emi_scenario']
 
-        try:
-            for col in cat_cols:
-                if col in df.columns:
-                    le = LabelEncoder()
-                    le.fit(df[col].astype(str))
+        for col in cat_cols:
+            if col in df.columns:
+                le = LabelEncoder()
+                le.fit(df[col].astype(str))
+                if input_data[col].iloc[0] not in le.classes_:
+                    input_data[col] = le.transform([le.classes_[0]])
+                else:
                     input_data[col] = le.transform(input_data[col].astype(str))
 
+        input_data = input_data.reindex(columns=df.drop(columns=['emi_eligibility', 'max_monthly_emi']).columns, fill_value=0)
+        input_data = input_data.apply(pd.to_numeric, errors='coerce').fillna(0)
+
+        try:
+            # 🧠 Load Models
             reg = joblib.load(REG_MODEL_PATH)
             cls = joblib.load(CLS_MODEL_PATH)
 
+            # 🎯 Predict
             with st.spinner("Processing your prediction... ⏳"):
                 eligibility_pred = cls.predict(input_data)[0]
                 emi_pred = reg.predict(input_data)[0]
 
+            # 🎨 Display
             eligibility_map = {0: ("✅ Eligible", "#00bfa5"), 1: ("⚠️ High Risk", "#ffb300"), 2: ("❌ Not Eligible", "#e53935")}
             status, color = eligibility_map.get(eligibility_pred, ("❓ Unknown", "#757575"))
 
@@ -191,11 +201,8 @@ elif st.session_state.page == "result":
                 st.error("❌ Unfortunately, you're not eligible now. Try adjusting your requested amount or tenure.")
 
         except Exception as e:
-            st.error("🚨 Error occurred while predicting. Please check details below.")
-            st.code(traceback.format_exc())
+            st.error(f"⚠️ An error occurred during prediction: **{e}**")
 
         if st.button("⬅️ Back to Input Page"):
             st.session_state.page = "input"
             st.rerun()
-
-
